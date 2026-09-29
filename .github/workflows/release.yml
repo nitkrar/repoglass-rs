@@ -1,0 +1,72 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  check:
+    name: tag matches Cargo.toml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          declared=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          test "${GITHUB_REF_NAME#v}" = "$declared" || {
+            echo "tag $GITHUB_REF_NAME but Cargo.toml says $declared" >&2
+            exit 1
+          }
+
+  build:
+    name: ${{ matrix.target }}
+    needs: check
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: aarch64-apple-darwin, os: macos-14, native: true }
+          - { target: x86_64-apple-darwin, os: macos-14, native: false }
+          # 22.04 for its older glibc, so the binary runs on more systems.
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04, native: true }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm, native: true }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: the built binary runs
+        if: matrix.native
+        run: |
+          test "$(target/${{ matrix.target }}/release/rpg --version)" = "${GITHUB_REF_NAME#v}"
+      - name: package
+        run: |
+          name=repoglass-rs-${GITHUB_REF_NAME}-${{ matrix.target }}
+          mkdir "$name"
+          cp target/${{ matrix.target }}/release/rpg target/${{ matrix.target }}/release/repoglass \
+             LICENSE data/queries/NOTICE.md README.md "$name/"
+          tar -czf "$name.tar.gz" "$name"
+          shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: repoglass-rs-*.tar.gz*
+
+  publish:
+    name: GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      # No --clobber: a re-run must not replace assets already published
+      # for this version.
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" --notes "" repoglass-rs-*.tar.gz*

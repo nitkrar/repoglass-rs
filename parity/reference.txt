@@ -1,0 +1,5 @@
+# The Python repoglass this build is compared with, as pip requirements.
+# Commit pins until repoglass 0.3.3 and semsift 0.0.6 are released.
+semsift @ git+https://github.com/nitkrar/semsift@577acb80e3431b341f41481d43a044724561c6a8
+repoglass @ git+https://github.com/nitkrar/repoglass@5927ca82adb2997892730e672a3b1a4da46eb5a8
+numpy

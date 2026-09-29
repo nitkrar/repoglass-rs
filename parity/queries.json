@@ -1,0 +1,29 @@
+{
+ "repoglass": [
+  "how are chunks bounded",
+  "which files count as tests",
+  "where is the index identity checked before reuse",
+  "how do the lexical and vector tiers get fused",
+  "what happens when the write lock is held",
+  "Index.refresh",
+  "normalise_content",
+  "how does the reranker boost definitions of the queried name"
+ ],
+ "repoglass-rs": [
+  "how are grammars downloaded on first run",
+  "where are python float reprs reproduced",
+  "how is a vector packed for storage",
+  "what does the canary check do",
+  "Store::open",
+  "chunked_definitions",
+  "how does the cli render text output",
+  "which settings are refused in the repository config"
+ ],
+ "langs": [
+  "unlock the vault with a key",
+  "unlockVault",
+  "unlock_vault",
+  "crypto open rounds",
+  "how is the vault opened"
+ ]
+}
