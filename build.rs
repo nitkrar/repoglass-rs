@@ -1,6 +1,4 @@
-//! Embeds the tag queries and the DDL from `data/`, copies of Python
-//! repoglass's. Parity CI compares `extractor_rev` and `schema_rev`, which
-//! hash them, so a copy that drifts fails there.
+//! Embeds the tag queries and the DDL from `data/` into the binary.
 
 use std::path::Path;
 

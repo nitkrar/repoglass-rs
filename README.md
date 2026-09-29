@@ -1,12 +1,12 @@
 # repoglass-rs
 
-A Rust build of [repoglass](https://github.com/nitkrar/repoglass): local code
-and prose search with exact symbol lookup. It installs the same `rpg` and
-`repoglass` commands, reads and writes the same index, and gives the same
-output as the Python version it is checked against.
+Local code and prose search with exact symbol lookup, in Rust. It installs
+`rpg` and `repoglass`, the same commands as the Python
+[repoglass](https://github.com/nitkrar/repoglass), and supersedes it.
 
-Status: unreleased. See [docs/parity.md](docs/parity.md) for what is checked
-and what is not.
+v0.1.0 reads and writes the same index as Python repoglass 0.3.3 and gives
+the same output; later versions make no such promise. See
+[docs/parity.md](docs/parity.md).
 
 ## Use
 
@@ -19,10 +19,9 @@ rpg status
 rpg --help
 ```
 
-The first run downloads the tree-sitter grammars and the embedding model into
-the caches Python repoglass uses, so an index built by either opens in the
-other. Installing both puts two `rpg` commands on PATH; whichever comes first
-runs.
+The first run downloads the tree-sitter grammars and the embedding model.
+Installing this and Python repoglass puts two `rpg` commands on PATH;
+whichever comes first runs.
 
 ## Build
 
@@ -31,15 +30,7 @@ cargo build --release     # target/release/rpg
 cargo test
 ```
 
-`data/` holds copies of Python repoglass's tag queries and index schema.
-Parity CI fails if they drift, because the index identity hashes them.
-
-## Parity
-
-`parity/ci.sh` indexes trees with both implementations and compares
-databases, command output, settings variants, the index lifecycle and
-behaviour under a held lock. CI runs it against the Python version pinned in
-`parity/reference.txt`.
+`data/` holds the tag queries and the index schema, embedded at build time.
 
 ## Licence
 

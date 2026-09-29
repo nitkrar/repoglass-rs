@@ -1,17 +1,21 @@
 # Parity with Python repoglass
 
-**Status:** 0.1.0. Checked against Python repoglass 0.3.3 and semsift 0.0.6,
-the versions pinned in `parity/reference.txt`. Parity runs on Linux; macOS
-runs the unit tests.
+**Status:** v0.1.0 matches Python repoglass 0.3.3 with semsift 0.0.6, the
+versions pinned in `parity/reference.txt`: the same index, byte for byte,
+and the same output. That is a record of v0.1.0, not a promise for later
+versions. This repository supersedes Python repoglass, which stays at 0.3.3
+for anyone who wants it, so a later version may change the index format or
+the output. A changed format rebuilds an older index on first open.
 
-`rpg` here reads and writes the same database as Python repoglass. An index
-built by either opens in the other with no reindex.
+The `parity` workflow runs the checks below by hand; nothing gates on it.
+When a version diverges on purpose, the scripts and the workflow go.
 
 ## How an item is checked
 
 `parity/ci.sh NAME=DIR ...` runs every check below on each tree and exits
-non-zero on any difference. CI runs it on Python repoglass's source, this
-repository, and Python repoglass's per-language samples. Its scripts read:
+non-zero on any difference. The `parity` workflow runs it on Python
+repoglass's source, this repository, and Python repoglass's per-language
+samples. Its scripts read:
 
 | Variable | Meaning |
 |---|---|

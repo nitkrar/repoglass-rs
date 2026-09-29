@@ -1,0 +1,56 @@
+name: parity
+
+# Run by hand: compares this build with the Python repoglass pinned in
+# parity/reference.txt. Not a gate; see docs/parity.md.
+on:
+  workflow_dispatch:
+
+jobs:
+  parity:
+    name: parity with Python repoglass
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: install the Python reference
+        run: |
+          python -m venv "$RUNNER_TEMP/py"
+          "$RUNNER_TEMP/py/bin/pip" install --quiet -r parity/reference.txt
+
+      # The reference's source is one corpus, and its language samples another.
+      - name: corpora
+        run: |
+          version=$(sed -n 's/^repoglass==//p' parity/reference.txt)
+          git clone --quiet --depth 1 --branch "v$version" \
+            https://github.com/nitkrar/repoglass "$RUNNER_TEMP/repoglass"
+          mkdir "$RUNNER_TEMP/langs"
+          cd "$RUNNER_TEMP/repoglass"
+          "$RUNNER_TEMP/py/bin/python" -c '
+          import sys; sys.path.insert(0, "tests")
+          from test_language_coverage import SAMPLES
+          for (lang, path), (src, _) in SAMPLES.items():
+              open(f"{sys.argv[1]}/{lang}.{path.split(chr(46))[1]}", "w").write(src)
+          ' "$RUNNER_TEMP/langs"
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/huggingface
+            ~/.cache/tree-sitter-language-pack
+          key: models-${{ hashFiles('parity/reference.txt') }}
+
+      - name: compare
+        env:
+          PY_RPG: ${{ runner.temp }}/py/bin/rpg
+          RS_RPG: ${{ github.workspace }}/target/release/rpg
+        run: >
+          bash parity/ci.sh
+          repoglass="$RUNNER_TEMP/repoglass"
+          repoglass-rs="$GITHUB_WORKSPACE"
+          langs="$RUNNER_TEMP/langs"
