@@ -1,8 +1,8 @@
 # Parity with Python repoglass
 
-**Status:** Unreleased. Checked against Python repoglass at the commit pinned
-in `parity/reference.txt`: the 0.3.3 fixes, not yet released. Checked in a
-Linux VM; the binary has not run on macOS.
+**Status:** 0.1.0. Checked against Python repoglass 0.3.3 and semsift 0.0.6,
+the versions pinned in `parity/reference.txt`. Parity runs on Linux; macOS
+runs the unit tests.
 
 `rpg` here reads and writes the same database as Python repoglass. An index
 built by either opens in the other with no reindex.

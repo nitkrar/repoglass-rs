@@ -39,9 +39,9 @@ jobs:
       # The reference's source is one corpus, and its language samples another.
       - name: corpora
         run: |
-          ref=$(sed -n 's|^repoglass @ git+\(.*\)@\(.*\)$|\1 \2|p' parity/reference.txt)
-          git clone --quiet "${ref% *}" "$RUNNER_TEMP/repoglass"
-          git -C "$RUNNER_TEMP/repoglass" checkout --quiet "${ref#* }"
+          version=$(sed -n 's/^repoglass==//p' parity/reference.txt)
+          git clone --quiet --depth 1 --branch "v$version" \
+            https://github.com/nitkrar/repoglass "$RUNNER_TEMP/repoglass"
           mkdir "$RUNNER_TEMP/langs"
           cd "$RUNNER_TEMP/repoglass"
           "$RUNNER_TEMP/py/bin/python" -c '
