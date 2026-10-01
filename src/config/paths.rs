@@ -32,14 +32,18 @@ pub fn expand_user(path: &Path) -> PathBuf {
     path.to_path_buf()
 }
 
+/// The user-level directory: `REPOGLASS_HOME`, or `~/.repoglass`.
+pub fn home() -> PathBuf {
+    match std::env::var(HOME_ENV) {
+        Ok(env) if !env.is_empty() => expand_user(Path::new(&env)),
+        _ => dirs::home_dir().unwrap_or_default().join(DATA_DIR_NAME),
+    }
+}
+
 impl Paths {
     /// Both roots resolved, honouring `REPOGLASS_HOME`.
     pub fn for_root(root: &Path) -> Paths {
-        let home = match std::env::var(HOME_ENV) {
-            Ok(env) if !env.is_empty() => expand_user(Path::new(&env)),
-            _ => dirs::home_dir().unwrap_or_default().join(DATA_DIR_NAME),
-        };
-        Paths { root: resolve(root), home, data_dir: None }
+        Paths { root: resolve(root), home: home(), data_dir: None }
     }
 
     /// Where this repository's index lives: central by default, keyed by

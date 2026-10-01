@@ -5,6 +5,7 @@ pub mod cli;
 pub mod config;
 pub mod corpus;
 pub mod embeddings;
+pub mod git;
 pub mod index;
 pub mod models;
 pub mod pyfmt;

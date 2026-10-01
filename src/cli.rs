@@ -30,6 +30,13 @@ paths are relative to it, and its index is keyed by the\n                   \
 resolved path, so two checkouts of one project do not\n                   \
 share an index. Use it to query another repository\n                   \
 without changing directory.\n  \
+  --git URL        index a git repository instead: one commit, fetched at\n                   \
+depth 1 into ~/.repoglass/git/ the first time and kept,\n                   \
+so later runs and rebuilds reuse it. -r then names a\n                   \
+directory inside the checkout.\n  \
+  --rev REV        with --git, the commit, tag or branch (default: the\n                   \
+remote's HEAD). A tag or branch is resolved once; delete\n                   \
+its checkout to fetch it again.\n  \
   --config PATH    a TOML file overriding the resolved settings\n  \
   --text           human-readable output instead of json (`config`\n                   \
 always emits TOML)\n\nrun `repoglass <command> --help` for a command's own options.")]
@@ -46,6 +53,12 @@ struct Common {
     /// directory to index and search (default: .); its index is keyed by the resolved path
     #[arg(short = 'r', long = "repo", default_value = ".", hide_default_value = true)]
     repo: PathBuf,
+    /// index this git repository: one commit, fetched once into ~/.repoglass/git/ and kept
+    #[arg(long, value_name = "URL")]
+    git: Option<String>,
+    /// with --git: the commit, tag or branch to fetch (default: the remote's HEAD)
+    #[arg(long, value_name = "REV", requires = "git")]
+    rev: Option<String>,
     /// TOML overriding the resolved settings
     #[arg(long)]
     config: Option<PathBuf>,
@@ -279,10 +292,30 @@ fn run(command: Command) -> Outcome {
     }
 }
 
+/// The directory this invocation is about: `-r`, or with `--git` a
+/// directory inside the checkout, fetched first when `fetch` is set.
+fn root(common: &Common, fetch: bool) -> Result<PathBuf, Fail> {
+    let Some(url) = &common.git else {
+        return Ok(resolve(&common.repo));
+    };
+    if common.repo.is_absolute()
+        || common.repo.components().any(|c| c == std::path::Component::ParentDir) {
+        return Err(fail("with --git, -r names a directory inside the checkout", 2));
+    }
+    let home = crate::config::paths::home();
+    let rev = common.rev.as_deref();
+    let dir = if fetch {
+        crate::git::checkout(&home, url, rev).map_err(|e| fail(&format!("{e:#}"), 1))?
+    } else {
+        crate::git::checkout_dir(&home, url, rev)
+    };
+    Ok(resolve(&dir.join(&common.repo)))
+}
+
 /// Open the index, announcing a first build on stderr: a first search on
 /// a large repository can take minutes, and silence reads as a hang.
 fn open(common: &Common) -> Result<Index, Fail> {
-    let root = resolve(&common.repo);
+    let root = root(common, true)?;
     if !root.is_dir() {
         return Err(fail(&format!("not a directory: {}", root.display()), 1));
     }
@@ -488,7 +521,7 @@ fn cmd_status(common: &Common) -> Outcome {
 /// Remove this directory's index, or with `--all` every index. Each
 /// removal is reported after the fact.
 fn cmd_clear(common: &Common, all: bool, dry_run: bool) -> Outcome {
-    let mut paths = Paths::for_root(&resolve(&common.repo));
+    let mut paths = Paths::for_root(&root(common, false)?);
     if let Some(config) = &common.config {
         paths.data_dir = load(None, Some(config)).map_err(|e| fail(&e.0, 1))?.data_dir;
     }
@@ -542,7 +575,7 @@ fn cmd_clear(common: &Common, all: bool, dry_run: bool) -> Outcome {
 fn resolved(common: &Common) -> Result<Settings, Fail> {
     let path = match &common.config {
         Some(p) => p.clone(),
-        None => resolve(&common.repo).join("repoglass.toml"),
+        None => root(common, true)?.join("repoglass.toml"),
     };
     load(None, Some(&path)).map_err(|e| fail(&e.0, 1))
 }
@@ -554,7 +587,7 @@ const INIT_HEADER: &str = "# Written by `repoglass init`. Values are the ones re
 # default, and regenerate with `repoglass init --force`.\n\n";
 
 fn cmd_init(common: &Common, force: bool) -> Outcome {
-    let target = resolve(&common.repo).join("repoglass.toml");
+    let target = root(common, true)?.join("repoglass.toml");
     if target.exists() && !force {
         return Err(fail(&format!("{} exists; pass --force to overwrite", target.display()), 1));
     }

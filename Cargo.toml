@@ -1,6 +1,6 @@
 [package]
 name = "repoglass-rs"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "Local code and prose index: symbol navigation, lexical and semantic retrieval"
 license = "MIT"
@@ -50,3 +50,11 @@ tempfile = "3"
 
 [profile.release]
 lto = "thin"
+
+# Optimised like release but without link-time optimisation, which
+# re-optimises the whole program on every build: for benchmarking while
+# iterating. Release builds keep lto.
+[profile.fast]
+inherits = "release"
+lto = false
+incremental = true
