@@ -164,10 +164,13 @@ pub fn extract(file: &SourceFile, source: &str, settings: &Settings) -> anyhow::
         }
     }
 
+    // One node, one reference: a member call matches both a call pattern
+    // and a member-read pattern.
+    let mut referenced: HashSet<(usize, usize)> = HashSet::new();
     for key in keys.iter().filter(|k| k.starts_with("name.reference.")) {
         for n in &captures[key] {
             let r = (n.start_byte(), n.end_byte());
-            if named_here.contains(&r) || ignored.contains(&r) {
+            if named_here.contains(&r) || ignored.contains(&r) || !referenced.insert(r) {
                 continue;
             }
             let owner = innermost(r.0, r.1).and_then(|s| by_span.get(&(s.0, s.1)).cloned());
@@ -235,4 +238,45 @@ fn leading_comments(lines: &[&str], start_line: i64) -> Vec<String> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    /// Each `tests/fixtures/refs/<lang>/` holds a `sample.*` and
+    /// `expected.txt`: every reference a reader would navigate from it,
+    /// `<line> <name>` per line, written by hand. Exact, so a duplicate
+    /// or an extra capture fails as surely as a missing one.
+    #[test]
+    fn references_are_exactly_the_written_uses() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/refs");
+        let mut dirs: Vec<_> = std::fs::read_dir(&root).unwrap().map(|e| e.unwrap().path()).collect();
+        dirs.sort();
+        let mut failures = Vec::new();
+        for dir in dirs {
+            let lang = dir.file_name().unwrap().to_string_lossy().into_owned();
+            let sample = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path())
+                .find(|p| p.file_stem().is_some_and(|s| s == "sample")).unwrap();
+            let mut expected: Vec<(i64, String)> = std::fs::read_to_string(dir.join("expected.txt")).unwrap()
+                .lines().map(|l| {
+                    let (line, name) = l.split_once(' ').unwrap();
+                    (line.parse().unwrap(), name.to_string())
+                }).collect();
+            let source = std::fs::read_to_string(&sample).unwrap();
+            let file = SourceFile {
+                path: sample.file_name().unwrap().to_string_lossy().into_owned(), mtime_ns: 0,
+                size: source.len() as i64, lang: lang.clone(), content_type: "code".into(),
+            };
+            let mut actual: Vec<(i64, String)> = extract(&file, &source, &Settings::default()).unwrap()
+                .symbols.into_iter().filter(|s| s.tag == "ref").map(|s| (s.start_line, s.name)).collect();
+            expected.sort();
+            actual.sort();
+            if actual != expected {
+                failures.push(format!("{lang}:\n  expected {expected:?}\n  actual   {actual:?}"));
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
 }
