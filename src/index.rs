@@ -337,10 +337,12 @@ impl Index {
             let (path, text) = rows.get(&id)?.clone();
             Some(Candidate { id, path, text, score })
         }).collect();
-        // Path priors are about code layout: applied only when the caller
-        // asked for code, or for nothing in particular that resolves to it.
+        // Path priors are about code layout: applied when the caller asked
+        // for code, or for nothing in particular, which returns tests and
+        // docs without asking for them.
         let legacy = Settings { content_excluded: vec!["config".into(), "data".into()], ..Settings::default() };
-        let penalise = normalise_content(&scope.content, &legacy).map_err(BadValue)? == ["code"];
+        let penalise = scope.content.is_empty()
+            || normalise_content(&scope.content, &legacy).map_err(BadValue)? == ["code"];
         let store = &self.store;
         let mut loader = |names: &HashSet<String>| -> anyhow::Result<Vec<Candidate>> {
             Ok(store.non_candidate_rows(names, &scope)?.into_iter()
