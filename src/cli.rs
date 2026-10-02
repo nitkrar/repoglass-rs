@@ -173,7 +173,7 @@ ranked list does not say.")]
     },
     /// build or update the index
     Index {
-        /// re-extract every file, not just changed ones
+        /// rebuild the index from empty
         #[arg(long)]
         force: bool,
         #[command(flatten)]

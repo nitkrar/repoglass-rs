@@ -79,19 +79,16 @@ impl Index {
     /// checkout and archive extraction.
     pub fn refresh(&mut self, force: bool) -> anyhow::Result<RefreshReport> {
         let started = Instant::now();
-        self.reindex_if_identity_changed()?;
+        self.reset_if_needed(force)?;
         let walked: HashMap<String, SourceFile> = discovery::walk(&self.paths, &self.settings)
             .into_iter().map(|f| (f.path.clone(), f)).collect();
         let indexed = self.store.known_files()?;
         let added: HashSet<&String> = walked.keys().filter(|p| !indexed.contains_key(*p)).collect();
         let mut deleted: Vec<String> = indexed.keys().filter(|p| !walked.contains_key(*p)).cloned().collect();
         deleted.sort();
-        let mut changed: HashSet<&String> = walked.iter()
+        let changed: HashSet<&String> = walked.iter()
             .filter(|(p, f)| indexed.get(*p).is_some_and(|&v| v != (f.mtime_ns, f.size)))
             .map(|(p, _)| p).collect();
-        if force {
-            changed.extend(walked.keys().filter(|p| !added.contains(p)));
-        }
         if !deleted.is_empty() {
             self.store.delete_files(&deleted)?;
         }
@@ -180,12 +177,11 @@ impl Index {
         })
     }
 
-    /// Drop every indexed row when anything that shaped it changed.
-    fn reindex_if_identity_changed(&mut self) -> anyhow::Result<()> {
+    /// Empty the index when forced, or when anything that shaped it changed.
+    fn reset_if_needed(&mut self, force: bool) -> anyhow::Result<()> {
         let current = self.current_identity()?;
-        if self.store.needs_reindex(&current)? {
-            self.store.reset_content()?;
-            self.store.set_identity(&current)?;
+        if force || self.store.needs_reindex(&current)? {
+            self.store.reset(&current)?;
         }
         Ok(())
     }

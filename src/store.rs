@@ -134,42 +134,53 @@ fn has_table(conn: &Connection, name: &str) -> anyhow::Result<bool> {
         .optional()?.is_some())
 }
 
-/// Drop every object this schema owns, views first.
-fn drop_all(conn: &Connection) -> anyhow::Result<()> {
+/// Drop every object, views first, and create the schema empty. One
+/// transaction, so another connection sees the old index or the new one
+/// and never a database without tables. Foreign keys are off for it:
+/// with them on, dropping a table deletes it row by row, cascades included.
+fn rebuild(conn: &Connection, settings: &Settings, extractor_rev: &str) -> anyhow::Result<()> {
     conn.execute_batch("PRAGMA foreign_keys = OFF")?;
-    let objects: Vec<(String, String)> = {
-        let mut st = conn.prepare(
-            "SELECT name, type FROM sqlite_master WHERE type IN ('view','table','index') \
-             AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'view' THEN 0 WHEN 'index' THEN 1 ELSE 2 END")?;
-        st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<_, _>>()?
-    };
-    for (name, kind) in objects {
-        let _ = conn.execute_batch(&format!("DROP {} IF EXISTS \"{name}\"", kind.to_uppercase()));
+    conn.execute_batch("BEGIN")?;
+    let result = (|| -> anyhow::Result<()> {
+        let objects: Vec<(String, String)> = {
+            let mut st = conn.prepare(
+                "SELECT name, type FROM sqlite_master WHERE type IN ('view','table','index') \
+                 AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'view' THEN 0 WHEN 'index' THEN 1 ELSE 2 END")?;
+            st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<_, _>>()?
+        };
+        for (name, kind) in objects {
+            let _ = conn.execute_batch(&format!("DROP {} IF EXISTS \"{name}\"", kind.to_uppercase()));
+        }
+        conn.execute_batch(SCHEMA_SQL)?;
+        conn.execute(
+            "INSERT INTO meta (id, schema_rev, embed_model, embed_backend, embed_dims, coverage, \
+             extractor_rev, categories_rev, last_scan_at) VALUES (1,?,?,?,?,?,?,?,0)",
+            params![schema_rev(), settings.embed_model, settings.embed_backend, 0, settings.coverage,
+                    extractor_rev, categories_rev(settings)])?;
+        Items::open(conn)?;
+        Ok(())
+    })();
+    match &result {
+        Ok(_) => conn.execute_batch("COMMIT")?,
+        Err(_) => conn.execute_batch("ROLLBACK")?,
     }
     conn.execute_batch("PRAGMA foreign_keys = ON")?;
-    Ok(())
+    result
 }
 
 impl Store {
     /// Open the database, creating or rebuilding the schema as needed.
     pub fn open(db: &Path, settings: &Settings, extractor_rev: &str) -> anyhow::Result<Store> {
         let conn = connect(db)?;
-        if has_table(&conn, "meta")? {
-            let stored: Option<String> = conn.query_row("SELECT schema_rev FROM meta WHERE id=1", [], |r| r.get(0))
-                .optional().ok().flatten();
-            if stored.as_deref() != Some(schema_rev().as_str()) {
-                drop_all(&conn)?;
-            }
+        // A changed schema is rebuilt rather than migrated.
+        let stored: Option<String> = if has_table(&conn, "meta")? {
+            conn.query_row("SELECT schema_rev FROM meta WHERE id=1", [], |r| r.get(0)).optional().ok().flatten()
+        } else {
+            None
+        };
+        if stored.as_deref() != Some(schema_rev().as_str()) {
+            rebuild(&conn, settings, extractor_rev)?;
         }
-        if !has_table(&conn, "meta")? {
-            conn.execute_batch(SCHEMA_SQL)?;
-            conn.execute(
-                "INSERT INTO meta (id, schema_rev, embed_model, embed_backend, embed_dims, coverage, \
-                 extractor_rev, categories_rev, last_scan_at) VALUES (1,?,?,?,?,?,?,?,0)",
-                params![schema_rev(), settings.embed_model, settings.embed_backend, 0, settings.coverage,
-                        extractor_rev, categories_rev(settings)])?;
-        }
-        Items::open(&conn)?;
         Ok(Store { conn, settings: settings.clone(), depth: std::cell::Cell::new(0) })
     }
 
@@ -347,12 +358,12 @@ impl Store {
         self.transaction(|| self.items().sync_keywords())
     }
 
-    /// Drop every indexed row, keeping meta.
-    pub fn reset_content(&self) -> anyhow::Result<()> {
-        self.transaction(|| {
-            self.conn.execute("DELETE FROM file", [])?;
-            self.items().clear()
-        })
+    /// Empty the index and record `current` as what it is built for. The
+    /// one way to a clean index: a changed schema, a changed identity and
+    /// a forced refresh all come here.
+    pub fn reset(&self, current: &Identity) -> anyhow::Result<()> {
+        rebuild(&self.conn, &self.settings, &current.extractor_rev)?;
+        self.set_identity(current)
     }
 
     pub fn set_identity(&self, i: &Identity) -> anyhow::Result<()> {

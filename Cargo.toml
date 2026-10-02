@@ -1,6 +1,6 @@
 [package]
 name = "repoglass-rs"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 description = "Local code and prose index: symbol navigation, lexical and semantic retrieval"
 license = "MIT"
